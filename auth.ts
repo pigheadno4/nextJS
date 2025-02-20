@@ -45,14 +45,14 @@ export const config = {
             email: credentials.email as string,
           },
         });
-
+        console.log(user);
         // Check if user exists and if the password matches
         if (user && user.password) {
           const isMatch = compareSync(
             credentials.password as string,
             user.password
           );
-
+          console.log(isMatch);
           if (isMatch) {
             return {
               id: user.id,
@@ -87,8 +87,9 @@ export const config = {
     async jwt({ token, user, trigger, session }: any) {
       // Assign user fields to token
       if (user) {
+        token.id = user.id;
         token.role = user.role;
-
+        console.log(token.id);
         // If user has no name then use the email
         if (user.name === "NO_NAME") {
           token.name = user.email!.split("@")[0];
@@ -99,11 +100,58 @@ export const config = {
           data: { name: token.name },
         });
       }
+
+      if (trigger === "signIn" || trigger === "signUp") {
+        const cookiesObject = await cookies();
+        const sessionCartId = cookiesObject.get("sessionCartId")?.value;
+
+        if (sessionCartId) {
+          const sessionCart = await prisma.cart.findFirst({
+            where: { sessionCartId },
+          });
+
+          if (sessionCart && sessionCart.userId !== user.id) {
+            // Delete current user cart
+            await prisma.cart.deleteMany({
+              where: { userId: user.id },
+            });
+
+            // Assign new cart
+            await prisma.cart.update({
+              where: { id: sessionCart.id },
+              data: { userId: user.id },
+            });
+          }
+        }
+      }
+
+      // Handle session updates
+      if (session?.user.name && trigger === "update") {
+        token.name = session.user.name;
+      }
       return token;
     },
     authorized({ request, auth }: any) {
-      // Check for session cart cookie
+      // Array of regex patterns of paths we want to protect
+
+      const protectedPaths = [
+        /\/shipping-address/,
+        /\/payment-method/,
+        /\/place-order/,
+        /\/profile/,
+        /\/user\/(.*)/,
+        /\/order\/(.*)/,
+        /\/admin/,
+      ];
+
+      // Get pathname from the req URL object
+      const { pathname } = request.nextUrl;
+
+      // Check if user is not authenticated and accessing a protected path
+      if (!auth && protectedPaths.some((p) => p.test(pathname))) return false;
+
       if (!request.cookies.get("sessionCartId")) {
+        // Check for session cart cookie
         // Generate new session cart id cookie
         const sessionCartId = crypto.randomUUID();
         // Clone the req headers
