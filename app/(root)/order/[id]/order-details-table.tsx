@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
   FUNDING,
@@ -24,14 +25,22 @@ import {
 import {
   createPayPalOrder,
   approvePayPalOrder,
+  updateOrderToPaidCOD,
+  deliverOrder,
 } from "@/lib/actions/order.action";
+import { useTransition } from "react";
+import StripePayment from "./stripe-payment";
 
 const OrderDetailsTable = ({
   order,
   paypalClientId,
+  isAdmin,
+  stripeClientSecret,
 }: {
   order: Order;
   paypalClientId: string;
+  isAdmin: boolean;
+  stripeClientSecret: string | null;
 }) => {
   const {
     id,
@@ -81,6 +90,54 @@ const OrderDetailsTable = ({
     });
   };
 
+  // Button to mark order as paid
+  const MarkAsPaidButton = () => {
+    const [isPending, startTransition] = useTransition();
+    const { toast } = useToast();
+
+    return (
+      <Button
+        type="button"
+        disabled={isPending}
+        onClick={() =>
+          startTransition(async () => {
+            const res = await updateOrderToPaidCOD(order.id);
+            toast({
+              variant: res.success ? "default" : "destructive",
+              description: res.message,
+            });
+          })
+        }
+      >
+        {isPending ? "processing..." : "Mark As Paid"}
+      </Button>
+    );
+  };
+
+  // Button to mark order as delivered
+  const MarkAsDeliveredButton = () => {
+    const [isPending, startTransition] = useTransition();
+    const { toast } = useToast();
+
+    return (
+      <Button
+        type="button"
+        disabled={isPending}
+        onClick={() =>
+          startTransition(async () => {
+            const res = await deliverOrder(order.id);
+            toast({
+              variant: res.success ? "default" : "destructive",
+              description: res.message,
+            });
+          })
+        }
+      >
+        {isPending ? "processing..." : "Mark As Delivered"}
+      </Button>
+    );
+  };
+
   return (
     <>
       <h1 className="py-4 text-2xl">Order {formatId(id)}</h1>
@@ -110,7 +167,7 @@ const OrderDetailsTable = ({
               </p>
               {isDelivered ? (
                 <Badge variant="secondary">
-                  Paid at {formatDateTime(deliveredAt!).dateTime}
+                  Delivered at {formatDateTime(deliveredAt!).dateTime}
                 </Badge>
               ) : (
                 <Badge variant="destructive">Not Delivered</Badge>
@@ -184,8 +241,9 @@ const OrderDetailsTable = ({
                   <PayPalScriptProvider
                     options={{
                       clientId: paypalClientId,
-                      buyerCountry: "US",
+                      buyerCountry: "ES",
                       components: ["buttons", "googlepay"],
+                      enableFunding: ["paylater"],
                     }}
                   >
                     <PrintLoadingState />
@@ -202,6 +260,20 @@ const OrderDetailsTable = ({
                   </PayPalScriptProvider>
                 </div>
               )}
+              {/* STRIPE Payment */}
+              {!isPaid && paymentMethod === "Stripe" && stripeClientSecret && (
+                <StripePayment
+                  priceInCents={Number(order.totalPrice) * 100}
+                  orderId={order.id}
+                  clientSecret={stripeClientSecret}
+                />
+              )}
+
+              {/* CASH on DELIVERY */}
+              {isAdmin && !isPaid && paymentMethod === "CashOnDelivery" && (
+                <MarkAsPaidButton />
+              )}
+              {isAdmin && isPaid && !isDelivered && <MarkAsDeliveredButton />}
             </CardContent>
           </Card>
         </div>

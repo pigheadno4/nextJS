@@ -21,6 +21,23 @@ export const paypal = {
               currency_code: "USD",
               value: price,
             },
+            payee: {
+              email_address: "merchant@example.com",
+            },
+            name: {
+              full_name: "test test",
+            },
+            shipping: {
+              address: {
+                address_line_1: "123 Townsend St",
+                address_line_2: "Floor 6",
+                admin_area_2: "San Francisco",
+                admin_area_1: "CA",
+                postal_code: "94107",
+                country_code: "US",
+              },
+              type: "SHIPPING",
+            },
           },
         ],
       }),
